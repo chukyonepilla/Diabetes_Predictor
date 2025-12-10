@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[2]:
-
-
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -33,8 +30,11 @@ def load_model_and_scaler_and_hyper(model_name):
     model = joblib.load(MODEL_PATHS[model_name])
     scaler = joblib.load(SCALER_PATH)
     hyper_all = joblib.load(HYPERPARAMS_PATH)
-    # Hyperparameter keys are typically like 'RandomForest', 'LogisticRegression', 'XGBoost'
-    key_map = {"Random Forest": "RandomForest", "Logistic Regression": "LogisticRegression", "XGBoost": "XGBoost"}
+    key_map = {
+        "Random Forest": "RandomForest",
+        "Logistic Regression": "LogisticRegression",
+        "XGBoost": "XGBoost"
+    }
     hyper = hyper_all[key_map[model_name]]
     return model, scaler, hyper
 
@@ -45,7 +45,8 @@ def collect_user_features():
     with cols1:
         HighBP = st.radio(
             "Ever diagnosed with high blood pressure?",
-            ["No", "Yes"], help="By a doctor, nurse, or other healthcare professional."
+            ["No", "Yes"],
+            help="By a doctor, nurse, or other healthcare professional."
         )
         HighChol = st.radio(
             "Ever diagnosed with high cholesterol?",
@@ -123,45 +124,45 @@ def collect_user_features():
             list(range(1, 14)),
             format_func=lambda x: [
                 "18–24", "25–29", "30–34", "35–39", "40–44", "45–49", "50–54",
-                "55–59", "60–64", "65–69", "70–74", "75–79", "80 or older"][x-1]
+                "55–59", "60–64", "65–69", "70–74", "75–79", "80 or older"
+            ][x-1]
         )
         Education = st.selectbox(
             "Highest education completed",
-            [1,2,3,4,5,6],
+            [1, 2, 3, 4, 5, 6],
             format_func=lambda x: {
-                1:"Elementary (1–8)", 2:"Some high school", 3:"High school grad",
-                4:"Some college/tech", 5:"College grad (2yr)", 6:"College grad (4yr)"
+                1: "Elementary (1–8)", 2: "Some high school", 3: "High school grad",
+                4: "Some college/tech", 5: "College grad (2yr)", 6: "College grad (4yr)"
             }[x]
         )
         Income = st.selectbox(
             "Approximate annual household income",
-            [1,2,3,4,5,6,7,8],
+            [1, 2, 3, 4, 5, 6, 7, 8],
             format_func=lambda x: {
-                1:"< $10,000", 2:"$10,000–<$15,000", 3:"$15,000–<$20,000",
-                4:"$20,000–<$25,000", 5:"$25,000–<$35,000", 6:"$35,000–<$50,000",
-                7:"$50,000–<$75,000", 8:"$75,000 or more"
+                1: "< $10,000", 2: "$10,000–<$15,000", 3: "$15,000–<$20,000",
+                4: "$20,000–<$25,000", 5: "$25,000–<$35,000", 6: "$35,000–<$50,000",
+                7: "$50,000–<$75,000", 8: "$75,000 or more"
             }[x]
         )
-    # Mapping radio/box values to model input numeric coding
     return np.array([
-        1 if HighBP=="Yes" else 0,
-        1 if HighChol=="Yes" else 0,
-        1 if CholCheck=="Yes" else 0,
+        1 if HighBP == "Yes" else 0,
+        1 if HighChol == "Yes" else 0,
+        1 if CholCheck == "Yes" else 0,
         BMI,
-        1 if Smoker=="Yes" else 0,
-        1 if Stroke=="Yes" else 0,
-        1 if HeartIssue=="Yes" else 0,
-        1 if PhysActivity=="Yes" else 0,
-        1 if Fruits=="Yes" else 0,
-        1 if Veggies=="Yes" else 0,
-        1 if AlcoholConsump=="Yes" else 0,
-        1 if AnyHealthcare=="Yes" else 0,
-        1 if MedCost=="Yes" else 0,
+        1 if Smoker == "Yes" else 0,
+        1 if Stroke == "Yes" else 0,
+        1 if HeartIssue == "Yes" else 0,
+        1 if PhysActivity == "Yes" else 0,
+        1 if Fruits == "Yes" else 0,
+        1 if Veggies == "Yes" else 0,
+        1 if AlcoholConsump == "Yes" else 0,
+        1 if AnyHealthcare == "Yes" else 0,
+        1 if MedCost == "Yes" else 0,
         GenHlth,
         MentHlth,
         PhysHlth,
-        1 if DiffWalk=="Yes" else 0,
-        1 if Sex=="Male" else 0,
+        1 if DiffWalk == "Yes" else 0,
+        1 if Sex == "Male" else 0,
         AgeBracket,
         Education,
         Income
@@ -186,7 +187,7 @@ X_input = collect_user_features()
 
 if st.button("Predict Diabetes Risk"):
     # --- Model inference pipeline ---
-    X_scaled = scaler.transform(X_input)  # StandardScaler means you must scale!
+    X_scaled = scaler.transform(X_input)
     pred = model.predict(X_scaled)[0]
     prob = model.predict_proba(X_scaled)[0][1]
 
@@ -205,31 +206,45 @@ if st.button("Predict Diabetes Risk"):
 
     st.markdown(
         f"""
-**Outcome:** {"🔴 Positive diabetes risk" if pred==1 else "🟢 Negative diabetes risk"}  
+**Outcome:** {"🔴 Positive diabetes risk" if pred == 1 else "🟢 Negative diabetes risk"}  
 **Estimated probability patient would be classified as diabetic:** `{prob:.2%}`
 """
     )
 
     st.divider()
     st.subheader("Most Influential Features for This Prediction")
-    # --- Feature importance for current prediction (patient) ---
     try:
-        # Use SHAP for per-patient/top feature contribution
+        # optional simple background; not critical but can help stability
+        background = np.zeros_like(X_scaled)
+
         if model_option == "Logistic Regression":
-            explainer = shap.LinearExplainer(model, X_scaled)
+            explainer = shap.LinearExplainer(model, background)
         else:
             explainer = shap.TreeExplainer(model)
+
         shap_values = explainer.shap_values(X_scaled)
-        # Take correct class if tree model shap returns a list
+
+        # binary classification cases:
         if isinstance(shap_values, list):
-            shap_values = shap_values[1]
-        contrib = pd.Series(shap_values[0], index=FEATURE_NAMES)
+            # list [class0, class1] -> take class 1
+            shap_sample = shap_values[1][0]
+        else:
+            # array (n_samples, n_features) -> first sample
+            shap_sample = shap_values[0]
+
+        shap_sample = np.array(shap_sample).reshape(-1)  # ensure 1D (21,)
+
+        contrib = pd.Series(shap_sample, index=FEATURE_NAMES)
         top_feats = contrib.abs().sort_values(ascending=False).head(5)
 
         for fname in top_feats.index:
-            effect = "raises risk" if contrib[fname]>0 else "lowers risk"
+            effect = "raises risk" if contrib[fname] > 0 else "lowers risk"
             st.markdown(f"- **{fname}**: {effect} ({contrib[fname]:+.2f} contribution)")
-        st.caption("Computed using SHAP for this individual input. Positive values mean higher risk.")
+
+        st.caption(
+            "Computed using SHAP for this individual input. "
+            "Positive values mean higher estimated diabetes risk."
+        )
     except Exception as ex:
         st.warning("Could not compute local feature importances (SHAP).")
         st.text(f"Error detail: {ex}")
@@ -239,17 +254,9 @@ if st.button("Predict Diabetes Risk"):
         """
 **Interpretation:**  
 Above results are machine-generated risk estimates using a validated ML model trained on a large U.S. population health dataset (BRFSS, with SMOTE+ENN balancing).  
-Highest-influence features above describe why the model classified this patient as at risk or not, *with signs indicating which way each factor pushes the result*.  
+Highest-influence features above describe why the model classified this patient as at risk or not, with signs indicating which way each factor pushes the result.  
 This risk score is for education and support only—it does not replace a provider diagnosis or lab testing.
 """
     )
-
 else:
     st.info("Complete all required fields and click Predict to view results.")
-
-
-# In[ ]:
-
-
-
-
