@@ -86,8 +86,7 @@ def collect_user_features():
         )
         AlcoholConsump = st.radio(
             "Currently a heavy drinker (male: >14/wk, female: >7/wk)?",
-            ["No", "Yes"],
-            help="One drink is equivalent to a 12-ounce beer, a 5-ounce glass of wine, or a drink with one shot of liquor"
+            ["No", "Yes"], help="One drink is equivalent to a 12-ounce beer, a 5-ounce glass of wine, or a drink with one shot of liquor"
         )
     with cols2:
         AnyHealthcare = st.radio(
@@ -250,7 +249,6 @@ else:
 
 
 # In[ ]:
-
 
 
 
