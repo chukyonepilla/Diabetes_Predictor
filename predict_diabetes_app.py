@@ -87,7 +87,8 @@ def collect_user_features():
         )
         AlcoholConsump = st.radio(
             "Currently a heavy drinker (male: >14/wk, female: >7/wk)?",
-            ["No", "Yes"], help="One drink is equivalent to a 12-ounce beer, a 5-ounce glass of wine, or a drink with one shot of liquor"
+            ["No", "Yes"],
+            help="One drink is equivalent to a 12-ounce beer, a 5-ounce glass of wine, or a drink with one shot of liquor"
         )
     with cols2:
         AnyHealthcare = st.radio(
@@ -214,25 +215,44 @@ if st.button("Predict Diabetes Risk"):
     st.divider()
     st.subheader("Most Influential Features for This Prediction")
     try:
-        # optional simple background; not critical but can help stability
-        background = np.zeros_like(X_scaled)
-
         if model_option == "Logistic Regression":
-            explainer = shap.LinearExplainer(model, background)
+            # linear model on scaled features
+            explainer = shap.LinearExplainer(model, X_scaled)
+            shap_vals = explainer.shap_values(X_scaled)      # (1, n_features)
+            shap_sample = np.array(shap_vals)[0]             # (n_features,)
         else:
+            # tree-based models: RF, XGBoost
             explainer = shap.TreeExplainer(model)
+            shap_vals = explainer.shap_values(X_scaled)
 
-        shap_values = explainer.shap_values(X_scaled)
+            if isinstance(shap_vals, list):
+                # list [class0, class1] -> take class 1
+                shap_arr = np.array(shap_vals[1])
+            else:
+                shap_arr = np.array(shap_vals)
 
-        # binary classification cases:
-        if isinstance(shap_values, list):
-            # list [class0, class1] -> take class 1
-            shap_sample = shap_values[1][0]
-        else:
-            # array (n_samples, n_features) -> first sample
-            shap_sample = shap_values[0]
+            # If we get per-tree outputs, reduce over trees
+            # Expect final shape (n_samples, n_features)
+            if shap_arr.ndim == 3:
+                # (n_trees, n_samples, n_features) or (n_samples, n_trees, n_features)
+                # handle common (n_trees, n_samples, n_features)
+                if shap_arr.shape[1] == 1 and shap_arr.shape[2] == len(FEATURE_NAMES):
+                    shap_arr = shap_arr.mean(axis=0)        # (1, n_features)
+                else:
+                    # fallback: mean over axis 1 if that yields (n_samples, n_features)
+                    if shap_arr.shape[0] == 1:
+                        shap_arr = shap_arr.mean(axis=1)    # (1, n_features)
+                    else:
+                        shap_arr = shap_arr.mean(axis=0)    # (n_samples, n_features)
 
-        shap_sample = np.array(shap_sample).reshape(-1)  # ensure 1D (21,)
+            shap_sample = shap_arr[0]  # first (and only) sample
+
+        shap_sample = np.array(shap_sample).reshape(-1)
+
+        if shap_sample.shape[0] != len(FEATURE_NAMES):
+            raise ValueError(
+                f"SHAP length {shap_sample.shape[0]} != number of features {len(FEATURE_NAMES)}"
+            )
 
         contrib = pd.Series(shap_sample, index=FEATURE_NAMES)
         top_feats = contrib.abs().sort_values(ascending=False).head(5)
