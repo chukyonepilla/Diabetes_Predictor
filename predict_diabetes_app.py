@@ -5,10 +5,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
-import shap
-import os
 
-# --- File paths (update if needed) ---
 MODEL_PATHS = {
     "Random Forest": "saved_models_phase1/random_forest_model_SM.pkl",
     "Logistic Regression": "saved_models_phase1/logistic_regression_model_SM.pkl",
@@ -48,14 +45,8 @@ def collect_user_features():
             ["No", "Yes"],
             help="By a doctor, nurse, or other healthcare professional."
         )
-        HighChol = st.radio(
-            "Ever diagnosed with high cholesterol?",
-            ["No", "Yes"]
-        )
-        CholCheck = st.radio(
-            "Had cholesterol checked in the last 5 years?",
-            ["No", "Yes"]
-        )
+        HighChol = st.radio("Ever diagnosed with high cholesterol?", ["No", "Yes"])
+        CholCheck = st.radio("Had cholesterol checked in the last 5 years?", ["No", "Yes"])
         BMI = st.number_input(
             "Body Mass Index (BMI)", 10.0, 70.0, 25.0, format="%.2f",
             help="Weight(kg)/[height(m)]². If not sure, check with your healthcare provider."
@@ -65,40 +56,22 @@ def collect_user_features():
             ["No", "Yes"],
             help="Even if no longer smoking."
         )
-        Stroke = st.radio(
-            "Ever had a stroke (doctor diagnosis)?",
-            ["No", "Yes"]
-        )
-        HeartIssue = st.radio(
-            "Coronary heart disease or heart attack ever diagnosed?",
-            ["No", "Yes"]
-        )
+        Stroke = st.radio("Ever had a stroke (doctor diagnosis)?", ["No", "Yes"])
+        HeartIssue = st.radio("Coronary heart disease or heart attack ever diagnosed?", ["No", "Yes"])
         PhysActivity = st.radio(
             "Any exercise/physical activity in past 30 days (besides regular job)?",
             ["No", "Yes"]
         )
-        Fruits = st.radio(
-            "Eat fruit one or more times per day?",
-            ["No", "Yes"]
-        )
-        Veggies = st.radio(
-            "Eat vegetables one or more times per day?",
-            ["No", "Yes"]
-        )
+        Fruits = st.radio("Eat fruit one or more times per day?", ["No", "Yes"])
+        Veggies = st.radio("Eat vegetables one or more times per day?", ["No", "Yes"])
         AlcoholConsump = st.radio(
             "Currently a heavy drinker (male: >14/wk, female: >7/wk)?",
             ["No", "Yes"],
-            help="One drink is equivalent to a 12-ounce beer, a 5-ounce glass of wine, or a drink with one shot of liquor"
+            help="One drink is a 12oz beer, 5oz wine, or one shot of liquor."
         )
     with cols2:
-        AnyHealthcare = st.radio(
-            "Have any kind of health care coverage?",
-            ["No", "Yes"]
-        )
-        MedCost = st.radio(
-            "Did cost prevent doctor visit in past year?",
-            ["No", "Yes"]
-        )
+        AnyHealthcare = st.radio("Have any kind of health care coverage?", ["No", "Yes"])
+        MedCost = st.radio("Did cost prevent doctor visit in past year?", ["No", "Yes"])
         GenHlth = st.selectbox(
             "How would you rate your general health?",
             [1, 2, 3, 4, 5],
@@ -112,14 +85,8 @@ def collect_user_features():
             "Number of days physical health not good in last 30 days",
             min_value=0, max_value=30, value=0
         )
-        DiffWalk = st.radio(
-            "Serious difficulty walking/climbing stairs?",
-            ["No", "Yes"]
-        )
-        Sex = st.radio(
-            "Sex assigned at birth",
-            ["Female", "Male"]
-        )
+        DiffWalk = st.radio("Serious difficulty walking/climbing stairs?", ["No", "Yes"])
+        Sex = st.radio("Sex assigned at birth", ["Female", "Male"])
         AgeBracket = st.selectbox(
             "What is your age group?",
             list(range(1, 14)),
@@ -197,6 +164,7 @@ if st.button("Predict Diabetes Risk"):
         "Logistic Regression": "Logistic Regression (statistical probability model)",
         "XGBoost": "Extreme Gradient Boosting (boosted tree model)"
     }
+
     st.subheader("Prediction Results")
     st.markdown(f"**Model used:** `{model_names_friendly[model_option]}`")
     st.markdown("**Model hyperparameters used for this prediction:**")
@@ -214,59 +182,49 @@ if st.button("Predict Diabetes Risk"):
 
     st.divider()
     st.subheader("Most Influential Features for This Prediction")
+
     try:
         if model_option == "Logistic Regression":
-            # linear model on scaled features
-            explainer = shap.LinearExplainer(model, X_scaled)
-            shap_vals = explainer.shap_values(X_scaled)      # (1, n_features)
-            shap_sample = np.array(shap_vals)[0]             # (n_features,)
-        else:
-            # tree-based models: RF, XGBoost
-            explainer = shap.TreeExplainer(model)
-            shap_vals = explainer.shap_values(X_scaled)
+            # Use absolute coefficients as importance, normalized like in your training code
+            coefs = np.abs(model.coef_[0])          # (n_features,)
+            coefs_norm = coefs / coefs.sum()
+            contrib = pd.Series(coefs_norm, index=FEATURE_NAMES)
+            top_feats = contrib.sort_values(ascending=False).head(5)
 
-            if isinstance(shap_vals, list):
-                # list [class0, class1] -> take class 1
-                shap_arr = np.array(shap_vals[1])
-            else:
-                shap_arr = np.array(shap_vals)
+            for fname in top_feats.index:
+                st.markdown(f"- **{fname}**: normalized coefficient weight = {contrib[fname]:.3f}")
 
-            # If we get per-tree outputs, reduce over trees
-            # Expect final shape (n_samples, n_features)
-            if shap_arr.ndim == 3:
-                # (n_trees, n_samples, n_features) or (n_samples, n_trees, n_features)
-                # handle common (n_trees, n_samples, n_features)
-                if shap_arr.shape[1] == 1 and shap_arr.shape[2] == len(FEATURE_NAMES):
-                    shap_arr = shap_arr.mean(axis=0)        # (1, n_features)
-                else:
-                    # fallback: mean over axis 1 if that yields (n_samples, n_features)
-                    if shap_arr.shape[0] == 1:
-                        shap_arr = shap_arr.mean(axis=1)    # (1, n_features)
-                    else:
-                        shap_arr = shap_arr.mean(axis=0)    # (n_samples, n_features)
-
-            shap_sample = shap_arr[0]  # first (and only) sample
-
-        shap_sample = np.array(shap_sample).reshape(-1)
-
-        if shap_sample.shape[0] != len(FEATURE_NAMES):
-            raise ValueError(
-                f"SHAP length {shap_sample.shape[0]} != number of features {len(FEATURE_NAMES)}"
+            st.caption(
+                "Feature influence computed from absolute Logistic Regression coefficients "
+                "(normalized so they sum to 1). Higher values mean stronger influence on risk."
             )
 
-        contrib = pd.Series(shap_sample, index=FEATURE_NAMES)
-        top_feats = contrib.abs().sort_values(ascending=False).head(5)
+        else:
+            # Tree-based models: Random Forest and XGBoost – use feature_importances_
+            if not hasattr(model, "feature_importances_"):
+                raise ValueError("Model has no feature_importances_ attribute.")
 
-        for fname in top_feats.index:
-            effect = "raises risk" if contrib[fname] > 0 else "lowers risk"
-            st.markdown(f"- **{fname}**: {effect} ({contrib[fname]:+.2f} contribution)")
+            importances = model.feature_importances_
+            if importances.shape[0] != len(FEATURE_NAMES):
+                raise ValueError(
+                    f"Importance length {importances.shape[0]} != number of features {len(FEATURE_NAMES)}"
+                )
 
-        st.caption(
-            "Computed using SHAP for this individual input. "
-            "Positive values mean higher estimated diabetes risk."
-        )
+            importances_norm = importances / importances.sum()
+            contrib = pd.Series(importances_norm, index=FEATURE_NAMES)
+            top_feats = contrib.sort_values(ascending=False).head(5)
+
+            for fname in top_feats.index:
+                st.markdown(f"- **{fname}**: normalized importance = {contrib[fname]:.3f}")
+
+            st.caption(
+                "Feature influence computed from the model's global feature importances "
+                "(normalized so they sum to 1). Higher values mean the feature is more "
+                "important for splits across trees."
+            )
+
     except Exception as ex:
-        st.warning("Could not compute local feature importances (SHAP).")
+        st.warning("Could not compute feature importances for this model.")
         st.text(f"Error detail: {ex}")
 
     st.divider()
@@ -274,7 +232,7 @@ if st.button("Predict Diabetes Risk"):
         """
 **Interpretation:**  
 Above results are machine-generated risk estimates using a validated ML model trained on a large U.S. population health dataset (BRFSS, with SMOTE+ENN balancing).  
-Highest-influence features above describe why the model classified this patient as at risk or not, with signs indicating which way each factor pushes the result.  
+Highest-influence features above describe why the model classified this patient as at risk or not.  
 This risk score is for education and support only—it does not replace a provider diagnosis or lab testing.
 """
     )
